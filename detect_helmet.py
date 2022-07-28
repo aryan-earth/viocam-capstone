@@ -12,58 +12,33 @@ ap.add_argument('-i', '--image', required=True, help='path to input image')
 args = vars(ap.parse_args())
 
 # YOLO constants
-model_weights_path = 'helmet.weights'
-model_config_path = 'helmet.cfg'
+model_weights_path = '/home/aryan-earth/capstone/yolo/helmet/helmet.weights'
+model_config_path = '/home/aryan-earth/capstone/yolo/helmet/helmet.cfg'
 helmet_net = cv.dnn.readNetFromDarknet(model_config_path, model_weights_path)
 
 image = cv.imread(args['image'])
 
 def find_helmet(image):
-    (H, W) = image.shape[:2]
+    model = cv.dnn_DetectionModel(helmet_net)
+    model.setInputParams(scale=1 / 255, size=(416, 416), swapRB=True)
 
-    layer_names = helmet_net.getLayerNames()
-    layer_names = [layer_names[i[0] - 1] for i in helmet_net.getUnconnectedOutLayers()]
+    classIds, scores, boxes = model.detect(image, confThreshold=0.6, nmsThreshold=0.4)
+    print(boxes)
 
-    blob = cv.dnn.blobFromImage(image, 1 / 255.0, (416, 416), swapRB=True, crop=False)
-    helmet_net.setInput(blob)
-    layer_outputs = helmet_net.forward(layer_names)
-
-    boxes = []
-    confidences = []
-    class_ids = []
-
-    for output in layer_outputs:
-        for detection in output:
-            scores = detection[5:]
-            class_id = np.argmax(scores)
-            confidence = scores[class_id]
-
-            box = detection[0:4] * np.array([W, H, W, H])
-            (center_x, center_y, width, height) = box.astype('int')
-
-            x = int(center_x - (width / 2))
-            y = int(center_y - (height / 2))
-
-            boxes.append([x, y, int(width), int(height), int(center_x), int(center_y)])
-            confidences.append(float(confidence))
-            class_ids.append(class_id)
-
-    idxs = cv.dnn.NMSBoxes(boxes, confidences, 0.6, 0.3) # Last two args are confidence and threshold respectively. 
-    
-    # Check if idxs is empty
-    if (len(idxs) == 0):
+    # Check if boxes is empty
+    if (len(boxes) == 0):
         raise  Exception(colored('No helmets detected', 'red'))
     else:
         # helmet found
         helmet_detection_image = image.copy()
-        no_of_helmets = len(idxs.flatten())
+        no_of_helmets = len(boxes)
         helmet_count = 0
         print('No of helmets: ' + str(no_of_helmets))
-        for i in idxs.flatten():
+        for box in boxes:
             # extract the bounding box coordinates
-            (x, y) = (boxes[i][0], boxes[i][1])
-            (w, h) = (boxes[i][2], boxes[i][3])
-            (center_x, center_y) = (boxes[i][4], boxes[i][5])
+            (x, y) = (box[0], box[1])
+            (w, h) = (box[2], box[3])
+        
 
             # Draw bounding box on the helmet_detection_image
             cv.rectangle(helmet_detection_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -80,6 +55,7 @@ def find_helmet(image):
         
         # return helmet_image, helmet_detection_image
         return helmet_detection_image
+        
 
 helmet_detection_image = find_helmet(image)
 cv.imwrite('helmet_detection_image.jpg', helmet_detection_image)
